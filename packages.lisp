@@ -38,6 +38,8 @@
 	   #:mc-del
 	   #:mc-incr
 	   #:mc-decr
+           #:mc-get-object
+           #:mc-store-object
 	   #:mc-stats
 	   #:mc-make-memcache-instance
 	   #:mc-server-check

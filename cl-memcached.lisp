@@ -27,13 +27,7 @@
 ;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 (in-package #:cl-memcached)
-
-
-;; (eval-when (:compile-toplevel :load-toplevel :execute)
-;;   (declaim (optimize (speed 3) (debug 0))))
-
 
 (defvar *memcache* 
   "Represents a particular Memcached server")
@@ -87,7 +81,6 @@ limit-maxbytes             mc-stats-limit-maxbytes           Number of bytes thi
   bytes curr-connections total-connections connection-structures cmd-get cmd-set
   get-hits get-misses evictions bytes-read bytes-written limit-maxbytes)
 
-
 ;;;
 ;;; The main class which represents the memcached server
 ;;;
@@ -122,7 +115,6 @@ limit-maxbytes             mc-stats-limit-maxbytes           Number of bytes thi
     :reader pool))
   (:documentation "This class represents an instance of the Memcached server"))
 
-
 (defmethod print-object ((mc memcache) stream)
   (format stream "#<~S ~A on ~A:~A SIZE:~AMb>"
 	  (type-of mc)
@@ -131,8 +123,8 @@ limit-maxbytes             mc-stats-limit-maxbytes           Number of bytes thi
 	  (when (slot-boundp mc 'port) (port mc))
 	  (when (slot-boundp mc 'memcached-server-storage-size) (/ (memcached-server-storage-size mc) 1024 1024))))
 
-
 (defmethod initialize-instance :after ((memcache memcache) &rest initargs)
+  (declare (ignore initargs))
   (setf (slot-value memcache 'pool) (make-instance 'memcache-connection-pool :name (concatenate 'simple-string (name memcache) " - Connection Pool") :max-capacity (pool-size memcache)))
   (handler-case (mc-pool-init :memcache memcache)
     (error () nil))
@@ -141,7 +133,6 @@ limit-maxbytes             mc-stats-limit-maxbytes           Number of bytes thi
     (if stats
 	(setf (slot-value memcache 'memcached-server-storage-size) (mc-stats-limit-maxbytes stats))
 	(setf (slot-value memcache 'memcached-server-storage-size) -1))))
-
 
 (defun mc-make-memcache-instance (&key (ip "127.0.0.1") (port 11211) (name "Cache Interface Instance") (pool-size 2))
   "Creates an instance of class MEMCACHE which represents a memcached server"
@@ -155,7 +146,6 @@ limit-maxbytes             mc-stats-limit-maxbytes           Number of bytes thi
 ;;; Memcached API functionality
 ;;;
 ;;;
-
 
 (defmacro mc-with-pool-y/n (&body body)
   "Macro to wrap the use-pool/dont-use-pool stuff and the cleanup
@@ -176,8 +166,6 @@ around a body of actual action statements"
        (if use-pool
 	   (mc-put-in-pool us :memcache memcache)
 	   (ignore-errors (usocket:socket-close us))))))
-
-
 
 (defun mc-store (key data &key (memcache *memcache*) ((:command command) :set) ((:timeout timeout) 0) ((:use-pool use-pool) *use-pool*) (encoding *default-encoding*))
   "Stores data in the memcached server using the :command command.
@@ -213,8 +201,6 @@ timeout => The time in seconds when this data expires.  0 is never expire."
       (let ((l (read-line s nil nil)))
 	(remove #\Return l)))))
 
-
-
 (defun mc-get (keys-list &key (memcache *memcache*) (use-pool *use-pool*) (encoding *default-encoding*))
   "Retrive value for key from memcached server.
 keys-list => is a list of the keys, seperated by whitespace, by which data is stored in memcached
@@ -243,19 +229,6 @@ value is of type (UNSIGNED-BYTE 8)"
 		 (read-line s nil nil)
 		 (list (second status-line) seq)))))
 
-
-
-(defun mc-get+ (key-or-list-of-keys &key (memcache *memcache*) (use-pool *use-pool*) (encoding *default-encoding*))
-  "To be used for non-binary data only. If one key is given
-returns the response in string format"
-  (if (listp key-or-list-of-keys)
-      (mc-get key-or-list-of-keys :memcache memcache :use-pool use-pool)
-      (flex:octets-to-string
-       (cadar (mc-get (list key-or-list-of-keys) :memcache memcache :use-pool use-pool :encoding encoding))
-       :external-format encoding)))
-
-
-
 (defun mc-del (key &key (memcache *memcache*) ((:time time) 0) (use-pool *use-pool*) (encoding *default-encoding*))
   "Deletes a particular 'key' and it's associated data from the memcached server"
   (declare (type fixnum time))
@@ -269,8 +242,6 @@ returns the response in string format"
     (force-output s)
     (let ((l (read-line s nil nil)))
       (remove #\Return l))))
-
-
 
 (defun mc-incr (key &key (memcache *memcache*) (value 1) (use-pool *use-pool*) (encoding *default-encoding*))
   "Implements the INCR command.  Increments the value of a key. Please read memcached documentation for more information
@@ -304,7 +275,6 @@ value is an integer"
 
 (defun mc-stats-raw (&key (memcache *memcache*) (use-pool *use-pool*) (encoding *default-encoding*))
   "Returns Raw stats data from memcached server to be used by the mc-stats function"
-  (declare (type fixnum port))
   (mc-with-pool-y/n
     (setq s (flex:make-flexi-stream s :external-format encoding))
     (with-output-to-string (str) 
@@ -314,8 +284,45 @@ value is an integer"
 	 do (princ line str)
 	 until (search "END" line)))))
 
+;;; High-Level Operations
 
+(defun serialize (object &key encoding)
+  (flex:string-to-octets (prin1-to-string object)
+                         :external-format encoding))
 
+(defun deserialize (sequence &key encoding)
+  (let ((string (flex:octets-to-string sequence :external-format encoding)))
+    (read-from-string string)))
+
+(defun get-objects (keys-list &key (memcache *memcache*) (use-pool *use-pool*) (encoding *default-encoding*))
+  (let ((items (mc-get keys-list
+                       :memcache memcache
+                       :use-pool use-pool
+                       :encoding encoding)))
+    (mapcar (lambda (item)
+              (list (first item)
+                    (deserialize (second item) :encoding encoding)))
+            items)))
+
+(defun mc-get-object (key-or-keys-list &key (memcache *memcache*) (use-pool *use-pool*) (encoding *default-encoding*))
+  (let* ((multp (listp key-or-keys-list))
+         (keys (if multp key-or-keys-list (list key-or-keys-list)))
+         (items (get-objects keys
+                             :memcache memcache
+                             :use-pool use-pool
+                             :encoding encoding)))
+    (if multp
+        items
+        (cadar items))))
+
+(defun mc-store-object (key object &key (memcache *memcache*) ((:command command) :set) ((:timeout timeout) 0) ((:use-pool use-pool) *use-pool*) (encoding *default-encoding*))
+  (let ((data (serialize object :encoding encoding)))
+    (mc-store key data
+              :memcache memcache
+              :command command
+              :timeout timeout
+              :use-pool use-pool
+              :encoding encoding)))
 
 ;;;
 ;;; Collects statistics from the memcached server
@@ -352,10 +359,6 @@ information about each slot"
      :bytes-written (parse-integer (second (assoc "bytes_written" temp :test #'string-equal)) :junk-allowed t)
      :limit-maxbytes (parse-integer (second (assoc "limit_maxbytes" temp :test #'string-equal)) :junk-allowed t))))
 
-
-
-
-
 ;;; Error Conditions
 
 (define-condition memcached-server-unreachable (error)
@@ -369,7 +372,6 @@ information about each slot"
 
 (define-condition bad-pool-object (error)
   ())
-
 
 ;;;
 ;;;
@@ -423,19 +425,16 @@ information about each slot"
     :reader pool-grow-lock))
   (:documentation "A memcached connection pool object"))
 
-
 (defmethod print-object ((mcp memcache-connection-pool) stream)
   (format stream "#<~S Capacity:~d, Currently in use:~d>"
 	  (type-of mcp)
 	  (when (slot-boundp mcp 'max-capacity) (max-capacity mcp))
 	  (when (slot-boundp mcp 'currently-in-use) (currently-in-use mcp))))
 
-
 (defun mc-put-in-pool (conn &key (memcache *memcache*))
   (with-process-lock ((pool-lock (pool memcache))) 
     (enqueue (pool (pool memcache)) conn)
     (decf (currently-in-use (pool memcache)))))
-
 
 (defun mc-get-from-pool (&key (memcache *memcache*))
   "Returns a pool object from pool."
@@ -449,7 +448,6 @@ information about each slot"
     (if state 
 	pool-object 
 	(error 'memcache-pool-empty))))
-
 
 (defun mc-get-from-pool-with-try (&key (memcache *memcache*) (tries 5) (try-interval 1))
   ""
@@ -465,7 +463,6 @@ information about each slot"
 			   (process-sleep try-interval))
 		    (return conn)))))))
 
-
 (defun mc-pool-init (&key (memcache *memcache*))
   "Cleans up the pool for this particular instance of memcache
 & reinits it with POOL-SIZE number of objects required by this pool"
@@ -474,12 +471,10 @@ information about each slot"
     (mc-pool-grow-request memcache))
   (mc-pool-grow memcache))
 
-
 (defun mc-make-pool-item (&key (memcache *memcache*))
   (handler-case (usocket:socket-connect (ip memcache) (port memcache) :element-type '(unsigned-byte 8))
     (usocket:socket-error () (error 'memcached-server-unreachable))
     (error () (error 'cannot-make-pool-object))))
-
 
 (defun mc-pool-grow (memcache)
   (let (grow-count pool-item-list)
@@ -494,12 +489,8 @@ information about each slot"
 	      (incf (current-size (pool memcache))))
 	 do (decf (pool-grow-requests (pool memcache)))))))
 
-
-
-
 (defun mc-destroy-pool-item (pool-item)
   (ignore-errors (usocket:socket-close pool-item)))
-
 
 (defun mc-pool-grow-request (memcache)
   (with-process-lock ((pool-grow-lock (pool memcache)))
@@ -507,7 +498,6 @@ information about each slot"
 					     (pool-grow-requests (pool memcache))))
 	(incf (pool-grow-requests (pool memcache)))
 	(warn "CL-MC: Pool is at Capacity"))))
-
 
 (defun mc-chuck-from-pool (object memcache)
   (mc-destroy-pool-item object)
@@ -529,6 +519,3 @@ information about each slot"
 	    (pool-grow-requests (pool memcache)) 0
 	    (total-created (pool memcache)) 0
 	    (total-uses (pool memcache)) 0))))
-
-
-
