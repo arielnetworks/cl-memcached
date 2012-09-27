@@ -56,9 +56,18 @@
 	  (:write (mc-store key data :memcache memcache :use-pool use-pool :timeout 600))
 	  (:read (mc-get (list key) :memcache memcache :use-pool use-pool)))))))
 
-
-
 ;; if you have cl-who installed, print a pretty html table for the memcached stats
+(defun sec-to-human-time-str (seconds)
+  (let* ((days (truncate (/ seconds 86400)))
+         (t1 (rem seconds 86400))
+         (hours (truncate (/ t1 3600)))
+         (t2 (rem t1 3600))
+         (minutes (truncate (/ t2 60)))
+         (seconds (rem t2 60))
+         )
+    (format nil "~@[~D day~:P, ~]~@[~D hour~:P, ~]~@[~D minute~:P, ~]~D second~:P" (if (eq 0 days) nil days) (if (eq 0 hours) nil hours) (if (eq 0 minutes) nil minutes) seconds)
+    )
+  )
 
 #+cl-who
 (defun memcached-details-table-helper (&key (memcache *memcache*) (stream *standard-output*))
@@ -72,7 +81,7 @@
 	       (:tr
 		(:td (format stream "Process ID")) (:td (format stream "~a" (cl-memcached::mc-stats-pid stats))))
 	       (:tr
-		(:td (format stream "Server Uptime")) (:td (format stream "~a" (ct-utils::sec-to-human-time-str (cl-memcached::mc-stats-uptime stats)))))
+		(:td (format stream "Server Uptime")) (:td (format stream "~a" (sec-to-human-time-str (cl-memcached::mc-stats-uptime stats)))))
 	       (:tr
 		(:td (format stream "System Time")) (:td (format stream "~a" (cl-memcached::mc-stats-time stats))))
 	       (:tr
