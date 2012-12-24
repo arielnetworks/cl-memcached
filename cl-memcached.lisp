@@ -472,7 +472,7 @@ information about each slot"
   (mc-pool-grow memcache))
 
 (defun mc-make-pool-item (&key (memcache *memcache*))
-  (handler-case (usocket:socket-connect (ip memcache) (port memcache) :element-type '(unsigned-byte 8))
+  (handler-case (usocket:socket-connect (ip memcache) (port memcache) :element-type #-sbcl '(unsigned-byte 8) #+sbcl 'CHARACTER)
     (usocket:socket-error () (error 'memcached-server-unreachable))
     (error () (error 'cannot-make-pool-object))))
 
