@@ -243,6 +243,15 @@ value is of type (UNSIGNED-BYTE 8)"
     (let ((l (read-line s nil nil)))
       (remove #\Return l))))
 
+(defun mc-flush-all (&key (memcache *memcache*) (use-pool *use-pool*))
+  "Flushes the memcached server, clearing all keys and values. Use with caution!"
+  (mc-with-pool-y/n
+    (write-string "flush_all" s)
+    (write-string +crlf+ s)
+    (force-output s)
+    (let ((l (read-line s nil nil)))
+      (remove #\Return l))))
+
 (defun mc-incr (key &key (memcache *memcache*) (value 1) (use-pool *use-pool*) (encoding *default-encoding*))
   "Implements the INCR command.  Increments the value of a key. Please read memcached documentation for more information
 key is a string

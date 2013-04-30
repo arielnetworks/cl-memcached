@@ -36,6 +36,7 @@
            #:mc-get
 	   #:mc-get+
 	   #:mc-del
+       #:mc-flush-all
 	   #:mc-incr
 	   #:mc-decr
            #:mc-get-object
